@@ -5,49 +5,201 @@ NOZLIB=: 0=(zlib,' zlibVersion >',(IFWIN#'+'),' x')&cd ::0:''
 zcompress2=: (zlib, ' compress2 >',(IFWIN#'+'),' i *c *x *c x i')&cd
 zuncompress=: (zlib, ' uncompress >',(IFWIN#'+'),' i *c *x *c x')&cd
 MAX_DEFLATE=: 16bffff
+DYNAMIC=: 0
+MAXSTATIC=: 500
+BLKSIZE=: 65536
 deflate=: 4 : 0
 'wrapper level'=. 2{.(boxopen x),<6
+cm=. 1
 if. (0=level) +. 0=#y do. cm=. 0
-elseif. 256>#y do.
+elseif. 256>:#y do.
   if. (#y) = #~.y do.
     cm=. 0
-  else.
-    cm=. 1
   end.
-elseif. do.
-  cm=. 1
 end.
 if. 0=cm do.
   wrapper deflate_unc y
   return.
 end.
-lz=. lz_enc y
+if. (#y) <: #lz=. lz_enc y do.
+  wrapper deflate_unc y
+  return.
+end.
+if. MAXSTATIC < #lz do.
+  numblk=. >.(#lz)%BLKSIZE
+  cm=. DYNAMIC{1 2
+  numblk=. #lx=. ~. (#lz),~ t1{~ (#~ (#t1)&>) [ (t1=. I. lz < 256) I. BLKSIZE*1+i.numblk
+else.
+  numblk=. 1
+  lx=. ,#lz
+end.
+blk=. 0
 of=. , |."1 (8#2) #: a.i. wrapper
-of=. of, 1 1 0
 i=. 0
-while. i<#lz do.
-  if. 256 > a=. i{lz do.
-    of=. of, fixed_huffman_code0 huff_encode a
+while. blk<numblk do.
+  of=. of, blk=numblk-1
+  of=. of, (cm-1){1 0,:0 1
+  assert. 256>i{lz
+  if. 2=cm do.
+    bs=. blk{ 0, lx
+    bl=. blk{ - 2 -/\ 0, lx
+    assert. bl>0
+    assert. i=bs
+    data=. (bs+i.bl){lz
+
+    lit_data=. (A1=. i.286), (286>data)#data
+    F1=. <: #/.~ lit_data
+    F1=. (1) 256}F1
+    bits1=. #&> F1 hcodes A1
+    bits1=. bits1 * (F1>0)
+    bits1=. (- +/*./\0=|.bits1)}.bits1
+    bits1=. (257&{.)^:(257>#bits1) bits1
+    lit_code0=. 0&huffman_code bits1
+
+    dist_data=. (A2=. i.32), 300 -~ ((329>:data)*.(300<:data))#data
+    F2=. <: #/.~ dist_data
+    bits2=. #&> F2 hcodes A2
+    bits2=. bits2 * (F2>0)
+    bits2=. (- +/*./\0=|.bits2)}.bits2
+    if. 0=#bits2 do.
+      bits2=. ,1
+    elseif. bits2-:,1 do.
+      bits2=. 1 1
+    end.
+    dist_code0=. 0&huffman_code bits2
+
+    litdist=. bits1,bits2
+    assert. 16> litdist
+    cls=. repeatcodelength litdist
+    litdista=. (A3=. i.19), (19>cls)#cls
+    F3=. <: #/.~ litdista
+    bits3=. #&> F3 hcodes A3
+    bits3=. bits3 * (F3>0)
+    order=. 16 17 18 0 8 7 9 6 10 5 11 4 12 3 13 2 14 1 15
+    bits3a=. order{bits3
+    bits3a=. (- +/*./\0=|.bits3a)}.bits3a
+    bits3a=. (4&{.)^:(4>#bits3a) bits3a
+    clen_code0=. 0&huffman_code bits3
+    clsh=. clen_code0 encodecodelength cls
+
+    HLIT=. #bits1
+    HDIST=. #bits2
+    HCLEN=. #bits3a
+
+    hdr=. |. (5#2) #: HLIT-257
+    hdr=. hdr, |. (5#2) #: HDIST-1
+    hdr=. hdr, |. (4#2) #: HCLEN-4
+    hdr=. hdr, , |.("1) (3#2) #:("1 0) bits3a
+    hdr=. hdr, clsh
+
+    of=. of,hdr
+  end.
+  while. i< blk{lx do.
+    if. 256 > a=. i{lz do.
+      i=. i+1
+      if. 1=cm do.
+        of=. of, fixed_huffman_code0 huff_encode a
+      else.
+        of=. of, lit_code0 huff_encode a
+      end.
+    else.
+      assert. (257 <: i{lz) *. (285 >: i{lz)
+      code=. i{lz
+      i=. i+1
+      ix=. code - 257
+      assert. (1000 <: i{lz) *. (2000 > i{lz)
+      extra=. (i{lz) - 1000
+      i=. i+1
+      if. 1=cm do.
+        of=. of, fixed_huffman_code0 huff_encode code
+      else.
+        of=. of, lit_code0 huff_encode code
+      end.
+      if. bit=. (<ix,0){lz_length do.
+        of=. of, |. (bit#2) #: extra
+      end.
+      assert. (300 <: i{lz) *. (329 >: i{lz)
+      code=. (i{lz) - 300
+      ix=. code
+      i=. i+1
+      assert. (2000 <: i{lz)
+      extra=. (i{lz) - 2000
+      i=. i+1
+      if. 1=cm do.
+        of=. of, (5#2) #: code
+      else.
+        of=. of, dist_code0 huff_encode code
+      end.
+      if. bit=. (<ix,0){lz_distance do.
+        of=. of, |. (bit#2) #: extra
+      end.
+    end.
+  end.
+  if. 1=cm do.
+    of=. of, fixed_huffman_code0 huff_encode 256
   else.
-    i=. i+1
-    a=. i{lz
-    code=. 257 + ix=. _1+ ({:"1 lz_length) I. 1+a
-    of=. of, fixed_huffman_code0 huff_encode code
-    if. bit=. (<ix,0){lz_length do.
-      of=. of, |. (bit#2) #: a - (<ix,1){lz_length
+    of=. of, lit_code0 huff_encode 256
+  end.
+  blk=. 1+blk
+end.
+a.{~ #.@|.("1) _8[\ of
+)
+repeatcodelength=: 3 : 0
+first=. 1, (}.y) ~: }:y
+rcode=. first # y
+rcnt=. first #;.1 y
+cls=. 0$0
+for_i. i.#rcode do.
+  if. 3>i{rcnt do.
+    cls=. cls, (i{rcnt)#i{rcode
+  else.
+    if. 0~:i{rcode do.
+      cls=. cls, i{rcode
+      for_j. _6#\ 1#~<:i{rcnt do.
+        if. j>2 do.
+          cls=. cls, 16, 100+j-3
+        else.
+          cls=. cls, j#i{rcode
+        end.
+      end.
+    else.
+      for_j. _138#\ 1#~i{rcnt do.
+        if. j>10 do.
+          cls=. cls, 18, 100+j-11
+        else.
+          for_k. _10#\ 1#~j do.
+            if. k>2 do.
+              cls=. cls, 17, 100+k-3
+            else.
+              cls=. cls, k#0
+            end.
+          end.
+        end.
+      end.
     end.
+  end.
+end.
+cls
+)
+encodecodelength=: 4 : 0
+z=. 0$0
+i=. 0
+while. i<#y do.
+  assert. 19>i{y
+  z=. z, x&huff_encode i{y
+  if. 16=i{y do.
     i=. i+1
-    a=. i{lz
-    code=. ix=. _1+ ({:"1 lz_distance) I. 1+a
-    of=. of, (5#2) #: code
-    if. bit=. (<ix,0){lz_distance do.
-      of=. of, |. (bit#2) #: a - (<ix,1){lz_distance
-    end.
+    z=. z, |. (2#2) #: 100 -~ i{y
+  elseif. 17=i{y do.
+    i=. i+1
+    z=. z, |. (3#2) #: 100 -~ i{y
+  elseif. 18=i{y do.
+    i=. i+1
+    z=. z, |. (7#2) #: 100 -~ i{y
   end.
   i=. i+1
 end.
-of=. of, fixed_huffman_code0 huff_encode 256
-a.{~ #.@|.("1) _8[\ of
+z
 )
 huff_encode=: 4 : 0
 'bit code sym'=. x{~ ({:"1 x) i. y
@@ -62,12 +214,30 @@ deflate_unc_block=: 4 : 0
 n=. #y
 (x{a.),(Endian 1&ic n),(Endian 1&ic 0 (26 b.) n), y
 )
+hc=: 4 : 0
+if. 1=#x do. y
+else. ((i{x),+/j{x) hc (i{y),<j{y [ i=. (i.#x) -. j=. 2{./:x end.
+)
+
+hcodes=: 4 : 0
+assert. x -:&$ y
+assert. (0<:x) *. 1=#$x
+assert. 1 >: L.y
+w=. ,&.> y
+assert. w -: ~.w
+t=. 0 {:: x hc w
+((< S: 0 t) i. w) { <@(1&=)@; S: 1 {:: t
+)
+hcbits=: 3 : 0
+b=. #&> x hcodes y
+)
+
 huffman_code=: 4 : 0
 bl_count=. 0, }. <: #/.~ (i.>:>./y),y
 code=. 0
 next_code=. 0
 maxb=. >./y
-for_b. >:i. >./y do.
+for_b. >:i. maxb do.
   code=. 2 * code + (b-1){bl_count
   next_code=. next_code, code
 end.
@@ -207,23 +377,19 @@ assert. 0 [ 'huff_decode'
 lz_enc=: 3 : 0
 if. 6>#y do. a.i. y return. end.
 h=. hash3 y
-of=. a.i. 3{.y
-i=. 3
+of=. a.i. 2{.y
+i=. 2
 win=. 32768
 maxmatch=. 258
 while. (_2+#y)>i do.
   j=. 0
-  if. (win>i-ix) *. (i-3) > ix=. ((i-3){.h) i: i{h do.
-    j=. 1
+  if. (win>i-ix) *. i > ix=. (i{.h) i: i{h do.
     lookahead=. i}.y
     history=. ix}.i{.y
-    while. ((#y)>i+j-1)*.(maxmatch>j) do.
-      if. ((j-1){lookahead) = {:j$history do. j=. j+1 else. break. end.
-    end.
-    j=. j-1
+    j=. ((#y)-i) <. +/ *./\ (maxmatch{.lookahead)=maxmatch $ history
   end.
   if. j>2 do.
-    of=. of, 256, j, i-ix
+    of=. of, (enclength j), encdistance i-ix
     i=. i+j
   else.
     of=. of, a.i. i{y
@@ -238,6 +404,20 @@ a=. , _2&ic("1) _4{.("1) _3]\ (>.&.(%&3)#y){.y
 b=. , _2&ic("1) _4{.("1) _3]\ (>.&.(%&3)#y){.}.y
 c=. , _2&ic("1) _4{.("1) _3]\ (>.&.(%&3)#y){.2}.y
 (#y){. , a,.b,.c
+)
+enclength=: 3 : 0
+ix=. <: +/({:"1 lz_length)<:y
+code=. 257 + ix
+ex=. y-(<ix,1){lz_length
+assert. (0<:ex)*.(30>:ex)
+code, 1000+ex
+)
+encdistance=: 3 : 0
+ix=. <: +/({:"1 lz_distance)<:y
+code=. 300 + ix
+ex=. y-(<ix,1){lz_distance
+assert. (0<:ex)*.(8191>:ex)
+code, 2000+ex
 )
 install=: 3 : 0
 if. -. IFWIN do. return. end.
@@ -284,12 +464,13 @@ if. 0~: rc=. zuncompress data;datalen;y;#y do.
   if. 0~:x do.
     assert. 0 [ 'zlib uncompression error'
   end.
-  while. _5=rc do.
+  while. rc e. _5 do.
     datalen=. , f=. 2*f
     data=. ({.datalen)#{.a.
     rc=. zuncompress data;datalen;y;#y
   end.
   if. 0~:rc do.
+    smoutput rc
     assert. 0 [ 'zlib uncompression error'
   end.
 end.
