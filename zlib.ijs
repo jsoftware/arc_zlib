@@ -5,8 +5,9 @@ NOZLIB=: 0=(zlib,' zlibVersion >',(IFWIN#'+'),' x')&cd ::0:''
 zcompress2=: (zlib, ' compress2 >',(IFWIN#'+'),' i *c *x *c x i')&cd
 zuncompress=: (zlib, ' uncompress >',(IFWIN#'+'),' i *c *x *c x')&cd
 MAX_DEFLATE=: 16bffff
-DYNAMIC=: 0
-MAXSTATIC=: 500
+
+DYNAMIC=: 1
+MAXSTATIC=: 100
 BLKSIZE=: 65536
 deflate=: 4 : 0
 'wrapper level'=. 2{.(boxopen x),<6
@@ -50,36 +51,37 @@ while. blk<numblk do.
     lit_data=. (A1=. i.286), (286>data)#data
     F1=. <: #/.~ lit_data
     F1=. (1) 256}F1
-    bits1=. #&> F1 hcodes A1
-    bits1=. bits1 * (F1>0)
+    bits1=. F1 bitlen A1
     bits1=. (- +/*./\0=|.bits1)}.bits1
     bits1=. (257&{.)^:(257>#bits1) bits1
-    lit_code0=. 0&huffman_code bits1
+    lit_code0=. def_code bits1
 
     dist_data=. (A2=. i.32), 300 -~ ((329>:data)*.(300<:data))#data
     F2=. <: #/.~ dist_data
-    bits2=. #&> F2 hcodes A2
-    bits2=. bits2 * (F2>0)
-    bits2=. (- +/*./\0=|.bits2)}.bits2
-    if. 0=#bits2 do.
-      bits2=. ,1
-    elseif. bits2-:,1 do.
-      bits2=. 1 1
+    if. (0~:F2)-:32{.1 0 do. F2=. 1 (1)}F2
+    elseif. 1=+/(0~:F2) do. F2=. 1 (0)}F2
     end.
-    dist_code0=. 0&huffman_code bits2
+    bits2=. F2 bitlen A2
+    bits2=. (- +/*./\0=|.bits2)}.bits2
+    if. 0~:#bits2 do.
+      dist_code0=. def_code bits2
+      assert. 1 0 0-:{.dist_code0
+    else.
+      bits2=. ,0
+      dist_code0=. ,:0 0 0
+    end.
 
     litdist=. bits1,bits2
     assert. 16> litdist
     cls=. repeatcodelength litdist
     litdista=. (A3=. i.19), (19>cls)#cls
     F3=. <: #/.~ litdista
-    bits3=. #&> F3 hcodes A3
-    bits3=. bits3 * (F3>0)
+    bits3=. F3 bitlen A3
     order=. 16 17 18 0 8 7 9 6 10 5 11 4 12 3 13 2 14 1 15
     bits3a=. order{bits3
     bits3a=. (- +/*./\0=|.bits3a)}.bits3a
     bits3a=. (4&{.)^:(4>#bits3a) bits3a
-    clen_code0=. 0&huffman_code bits3
+    clen_code0=. def_code bits3
     clsh=. clen_code0 encodecodelength cls
 
     HLIT=. #bits1
@@ -228,32 +230,44 @@ assert. w -: ~.w
 t=. 0 {:: x hc w
 ((< S: 0 t) i. w) { <@(1&=)@; S: 1 {:: t
 )
-hcbits=: 3 : 0
-b=. #&> x hcodes y
+bl_count=: 3 :0
+0,}.<:#/.~(,~ [: i. 1 + >./)y
 )
 
-huffman_code=: 4 : 0
-bl_count=. 0, }. <: #/.~ (i.>:>./y),y
-code=. 0
-next_code=. 0
-maxb=. >./y
-for_b. >:i. maxb do.
-  code=. 2 * code + (b-1){bl_count
-  next_code=. next_code, code
-end.
-huffcode=. 0 0$0
-for_n. i. #y do.
-  l=. n{y
-  if. l do.
-    huffcode=. huffcode, l, c=. l{next_code
-    next_code=. (1+c) l}next_code
-  end.
-end.
-huffcode=. huffcode,.(0~:y)#i.#y
-if. 1=x do. /:~ huffcode end.
+start_vals=: +:@+/\.&.|.@}:@,~&0
+find_codes=: 3 :0
+b=. bl_count y
+v=. start_vals b
+n=. /:~ ~.y-.0
+o=. ;({./.~ /:~ (</. i.@#)) y-.0
+c=. ;<"1&.>n (([#2:) #: ])&.> (*b)#v+&.>i.&.>b
+c /: o
 )
-fixed_huffman_code0=: 0&huffman_code (144#8),(112#9),(24#7),(8#8)
-fixed_huffman_code1=: 1&huffman_code (144#8),(112#9),(24#7),(8#8)
+def_code=: 3 :0
+assert. 1<+/0~:y
+b=. bl_count y
+v=. start_vals b
+n=. /:~ ~.y-.0
+o=. ;({./.~ /:~ (</. i.@#)) y-.0
+c=. ;n,.&.>(*b)#v+&.>i.&.>b
+z=. (I.0~:y),.~ c /: o
+test_rule z
+z
+)
+
+bitlen=: 4 :0
+assert. 1<+/0~:x
+b=. 0~:x
+b #inv #@>(b#x) hcodes b#y
+)
+test_rule=: 3 : 0
+for_i. ~. {."1 y1=. y/:({:"1 y) do.
+  s=. (i={."1 y1) # (1{"1 y1)
+  assert. (({.s)+i.#s) -: s
+end.
+)
+fixed_huffman_code0=: def_code (144#8),(112#9),(24#7),(8#8)
+fixed_huffman_code1=: /:~ def_code (144#8),(112#9),(24#7),(8#8)
 lz_length=: 0 0 0 0 0 0 0 0 1 1 1 1 2 2 2 2 3 3 3 3 4 4 4 4 5 5 5 5 0
 lz_length=: lz_length ,. 3 4 5 6 7 8 9 10 11 13 15 17 19 23 27 31 35 43 51 59 67 83 99 115 131 163 195 227 258
 
@@ -287,7 +301,7 @@ while. (-.lastblock)*.bf_end> >.&.(%&8) bf do.
       clen=. 19#0
       order=. 16 17 18 0 8 7 9 6 10 5 11 4 12 3 13 2 14 1 15
       clen=. (2#. |.("1) _3]\ (14+bf+i.3*HCLEN){huff_buf) (HCLEN{.order)}clen
-      clen_code1=: 1&huffman_code clen
+      clen_code1=: /:~ def_code clen
       bf=. bf + 14 + 3 * HCLEN
       lit=. 0
       litdist=. 0$0
@@ -306,8 +320,13 @@ while. (-.lastblock)*.bf_end> >.&.(%&8) bf do.
           bf=. bf+7
         end.
       end.
-      lit_code1=. 1&huffman_code HLIT{.litdist
-      dist_code1=. 1&huffman_code HLIT}.litdist
+      assert. 1<#HLIT{.litdist
+      lit_code1=. /:~ def_code HLIT{.litdist
+      if. 1<#HLIT}.litdist do.
+        dist_code1=. /:~ def_code HLIT}.litdist
+      else.
+        dist_code1=. ,:0 0 0
+      end.
     end.
     lit=. 0
     while. 256~:lit do.
@@ -344,26 +363,6 @@ while. (-.lastblock)*.bf_end> >.&.(%&8) bf do.
 end.
 huff_buf=: ''
 of
-)
-huffman_code=: 4 : 0
-bl_count=. 0, }. <: #/.~ (i.>:>./y),y
-code=. 0
-next_code=. 0
-maxb=. >./y
-for_b. >:i. >./y do.
-  code=. 2 * code + (b-1){bl_count
-  next_code=. next_code, code
-end.
-huffcode=. 0 0$0
-for_n. i. #y do.
-  l=. n{y
-  if. l do.
-    huffcode=. huffcode, l, c=. l{next_code
-    next_code=. (1+c) l}next_code
-  end.
-end.
-huffcode=. huffcode,.(0~:y)#i.#y
-if. 1=x do. /:~ huffcode end.
 )
 huff_decode=: 4 : 0
 for_bit. ~.{."1 x do.
