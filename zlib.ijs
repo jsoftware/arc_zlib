@@ -10,25 +10,22 @@ DYNAMIC=: 1
 MAXSTATIC=: 100
 BLKSIZE=: 65536
 deflate=: 4 : 0
-'wrapper level'=. 2{.(boxopen x),<6
-cm=. 1
-if. (0=level) +. 0=#y do. cm=. 0
+'wrapper level'=. 2{.(boxopen x),<NOZLIB{6 1
+BTYPE=. 1
+if. (0=level) +. 0=#y do. BTYPE=. 0
 elseif. 256>:#y do.
   if. (#y) = #~.y do.
-    cm=. 0
+    BTYPE=. 0
   end.
 end.
-if. 0=cm do.
+if. 0=BTYPE do.
   wrapper deflate_unc y
   return.
 end.
-if. (#y) <: #lz=. lz_enc y do.
-  wrapper deflate_unc y
-  return.
-end.
+lz=. level lz_enc y
 if. MAXSTATIC < #lz do.
   numblk=. >.(#lz)%BLKSIZE
-  cm=. DYNAMIC{1 2
+  BTYPE=. DYNAMIC{1 2
   numblk=. #lx=. ~. (#lz),~ t1{~ (#~ (#t1)&>) [ (t1=. I. lz < 256) I. BLKSIZE*1+i.numblk
 else.
   numblk=. 1
@@ -38,10 +35,10 @@ blk=. 0
 of=. , |."1 (8#2) #: a.i. wrapper
 i=. 0
 while. blk<numblk do.
-  of=. of, blk=numblk-1
-  of=. of, (cm-1){1 0,:0 1
+  of=. of, BFINAL=. blk=numblk-1
+  of=. of, (BTYPE-1){1 0,:0 1
   assert. 256>i{lz
-  if. 2=cm do.
+  if. 2=BTYPE do.
     bs=. blk{ 0, lx
     bl=. blk{ - 2 -/\ 0, lx
     assert. bl>0
@@ -51,38 +48,52 @@ while. blk<numblk do.
     lit_data=. (A1=. i.286), (286>data)#data
     F1=. <: #/.~ lit_data
     F1=. (1) 256}F1
-    bits1=. F1 bitlen A1
+    whilst. 15<>./bits1 do.
+      bits1=. F1 bitlen A1
+      minbits=. <./F1-.0
+      F1=. (1+minbits) (I.minbits=F1) } F1
+    end.
     bits1=. (- +/*./\0=|.bits1)}.bits1
     bits1=. (257&{.)^:(257>#bits1) bits1
-    lit_code0=. def_code bits1
+    lit_code=. /:~ def_code bits1
 
     dist_data=. (A2=. i.32), 300 -~ ((329>:data)*.(300<:data))#data
     F2=. <: #/.~ dist_data
-    if. (0~:F2)-:32{.1 0 do. F2=. 1 (1)}F2
-    elseif. 1=+/(0~:F2) do. F2=. 1 (0)}F2
-    end.
-    bits2=. F2 bitlen A2
-    bits2=. (- +/*./\0=|.bits2)}.bits2
-    if. 0~:#bits2 do.
-      dist_code0=. def_code bits2
-      assert. 1 0 0-:{.dist_code0
-    else.
+    if. 0=+/0~:F2 do.
       bits2=. ,0
-      dist_code0=. ,:0 0 0
+      dist_code=. ,:0 0 0
+    else.
+      if. 1=+/0~:F2 do.
+        if. 1={.0~:F2 do.
+          F2=. 1 (1)}0~:F2
+        else.
+          F2=. 1 (0)}0~:F2
+        end.
+      end.
+      whilst. 15<>./bits2 do.
+        bits2=. F2 bitlen A2
+        minbits=. <./F2-.0
+        F2=. (1+minbits) (I.minbits=F2) } F2
+      end.
+      bits2=. (- +/*./\0=|.bits2)}.bits2
+      dist_code=. /:~ def_code bits2
     end.
-
     litdist=. bits1,bits2
     assert. 16> litdist
     cls=. repeatcodelength litdist
     litdista=. (A3=. i.19), (19>cls)#cls
     F3=. <: #/.~ litdista
-    bits3=. F3 bitlen A3
+    whilst. 7<>./bits3 do.
+      bits3=. F3 bitlen A3
+      minbits=. <./F3-.0
+      F3=. (1+minbits) (I.minbits=F3) } F3
+    end.
     order=. 16 17 18 0 8 7 9 6 10 5 11 4 12 3 13 2 14 1 15
     bits3a=. order{bits3
     bits3a=. (- +/*./\0=|.bits3a)}.bits3a
     bits3a=. (4&{.)^:(4>#bits3a) bits3a
-    clen_code0=. def_code bits3
-    clsh=. clen_code0 encodecodelength cls
+    clen_code=. /:~ def_code bits3
+    clsh=. clen_code encodecodelength cls
 
     HLIT=. #bits1
     HDIST=. #bits2
@@ -96,27 +107,19 @@ while. blk<numblk do.
 
     of=. of,hdr
   end.
+  assert. 256>:i{lz [ 'first symbol is not a literal'
   while. i< blk{lx do.
-    if. 256 > a=. i{lz do.
-      i=. i+1
-      if. 1=cm do.
-        of=. of, fixed_huffman_code0 huff_encode a
-      else.
-        of=. of, lit_code0 huff_encode a
-      end.
-    else.
-      assert. (257 <: i{lz) *. (285 >: i{lz)
-      code=. i{lz
-      i=. i+1
+    code=. i{lz
+    assert. 285>:code [ 'not literal or length'
+    assert. 256~:code [ 'EOB is illegal during encoding'
+    of=. of, (lit_code&huff_encode)`(fixed_huffman_code&huff_encode)@.(1=BTYPE) code
+    i=. i+1
+
+    if. 257 <: code do.
       ix=. code - 257
       assert. (1000 <: i{lz) *. (2000 > i{lz)
       extra=. (i{lz) - 1000
       i=. i+1
-      if. 1=cm do.
-        of=. of, fixed_huffman_code0 huff_encode code
-      else.
-        of=. of, lit_code0 huff_encode code
-      end.
       if. bit=. (<ix,0){lz_length do.
         of=. of, |. (bit#2) #: extra
       end.
@@ -127,21 +130,14 @@ while. blk<numblk do.
       assert. (2000 <: i{lz)
       extra=. (i{lz) - 2000
       i=. i+1
-      if. 1=cm do.
-        of=. of, (5#2) #: code
-      else.
-        of=. of, dist_code0 huff_encode code
-      end.
+
+      of=. of, (dist_code&huff_encode)`((5#2)&#:)@.(1=BTYPE) code
       if. bit=. (<ix,0){lz_distance do.
         of=. of, |. (bit#2) #: extra
       end.
     end.
   end.
-  if. 1=cm do.
-    of=. of, fixed_huffman_code0 huff_encode 256
-  else.
-    of=. of, lit_code0 huff_encode 256
-  end.
+  of=. of, (lit_code&huff_encode)`(fixed_huffman_code&huff_encode)@.(1=BTYPE) 256
   blk=. 1+blk
 end.
 a.{~ #.@|.("1) _8[\ of
@@ -254,7 +250,6 @@ z=. (I.0~:y),.~ c /: o
 test_rule z
 z
 )
-
 bitlen=: 4 :0
 assert. 1<+/0~:x
 b=. 0~:x
@@ -266,47 +261,43 @@ for_i. ~. {."1 y1=. y/:({:"1 y) do.
   assert. (({.s)+i.#s) -: s
 end.
 )
-fixed_huffman_code0=: def_code (144#8),(112#9),(24#7),(8#8)
-fixed_huffman_code1=: /:~ def_code (144#8),(112#9),(24#7),(8#8)
+fixed_huffman_code=: /:~ def_code (144#8),(112#9),(24#7),(8#8)
 lz_length=: 0 0 0 0 0 0 0 0 1 1 1 1 2 2 2 2 3 3 3 3 4 4 4 4 5 5 5 5 0
 lz_length=: lz_length ,. 3 4 5 6 7 8 9 10 11 13 15 17 19 23 27 31 35 43 51 59 67 83 99 115 131 163 195 227 258
-
 lz_distance=: 0 0 0 0 1 1 2 2 3 3 4 4 5 5 6 6 7 7 8 8 9 9 10 10 11 11 12 12 13 13
 lz_distance=: lz_distance ,. 1 2 3 4 5 7 9 13 17 25 33 49 65 97 129 193 257 385 513 769 1025 1537 2049 3073 4097 6145 8193 12289 16385 24577
 inflate=: 3 : 0
-if=. 0$0
 of=. ''
 huff_buf=: , |."1 (8#2) #: a.i. y
 
-lastblock=. 0
+BFINAL=. 0
 bf=. 0
 bf_end=. 8*#y
-while. (-.lastblock)*.bf_end> >.&.(%&8) bf do.
-  lastblock=. 1=0{huff_buf
+while. (-.BFINAL)*.bf_end> >.&.(%&8) bf do.
+  BFINAL=. 1=0{huff_buf
   bf=. 1+bf
-  cmptype=. #.(bf+i._2){huff_buf
+  BTYPE=. #.(bf+i._2){huff_buf
   bf=. 2+bf
-  if. 0=cmptype do.
-    oof=: of
+  if. 0=BTYPE do.
     bf=. >.&.(%&8) bf
     len=. #.(bf+i._16){huff_buf
     assert. (-.(16+bf+i._16){huff_buf)=(bf+i._16){huff_buf [ 'uncompressed block length error'
     of=. of, (4+(bf%8)+i.len){y
     bf=. 32+bf+8*len
-  elseif. cmptype e. 1 2 do.
-    if. 2=cmptype do.
+  elseif. BTYPE e. 1 2 do.
+    if. 2=BTYPE do.
       HLIT=. 257 + 2#.(bf+i._5){huff_buf
       HDIST=. 1 + 2#.(5+bf+i._5){huff_buf
       HCLEN=. 4 + 2#.(10+bf+i._4){huff_buf
       clen=. 19#0
       order=. 16 17 18 0 8 7 9 6 10 5 11 4 12 3 13 2 14 1 15
       clen=. (2#. |.("1) _3]\ (14+bf+i.3*HCLEN){huff_buf) (HCLEN{.order)}clen
-      clen_code1=: /:~ def_code clen
+      clen_code=: /:~ def_code clen
       bf=. bf + 14 + 3 * HCLEN
       lit=. 0
       litdist=. 0$0
       while. (HLIT+HDIST)>#litdist do.
-        'lit bf'=. clen_code1 huff_decode bf
+        'lit bf'=. clen_code&huff_decode bf
         if. lit<16 do.
           litdist=. litdist, lit
         elseif. 16=lit do.
@@ -321,19 +312,21 @@ while. (-.lastblock)*.bf_end> >.&.(%&8) bf do.
         end.
       end.
       assert. 1<#HLIT{.litdist
-      lit_code1=. /:~ def_code HLIT{.litdist
+      lit_code=. /:~ def_code HLIT{.litdist
+      if. 141=+/0~:HLIT{.litdist do.
+      end.
       if. 1<#HLIT}.litdist do.
-        dist_code1=. /:~ def_code HLIT}.litdist
+        dist_code=. /:~ def_code HLIT}.litdist
       else.
-        dist_code1=. ,:0 0 0
+        dist_code=. ,:0 0 0
       end.
     end.
     lit=. 0
     while. 256~:lit do.
-      if. 1=cmptype do.
-        'lit bf'=. fixed_huffman_code1 huff_decode bf
+      if. 1=BTYPE do.
+        'lit bf'=. fixed_huffman_code&huff_decode bf
       else.
-        'lit bf'=. lit_code1 huff_decode bf
+        'lit bf'=. lit_code&huff_decode bf
       end.
       if. 256>lit do.
         of=. of, lit{a.
@@ -344,11 +337,11 @@ while. (-.lastblock)*.bf_end> >.&.(%&8) bf do.
       if. b do. l2=. 2#.(bf+i.-b){huff_buf end.
       len=. l1 + l2
       bf=. bf+b
-      if. 1=cmptype do.
+      if. 1=BTYPE do.
         dist=. 2#.(bf+i.5){huff_buf
         bf=. bf+5
       else.
-        'dist bf'=. dist_code1 huff_decode bf
+        'dist bf'=. dist_code&huff_decode bf
       end.
       'b l1'=. lz_distance {~ dist
       l2=. 0
@@ -373,8 +366,11 @@ for_bit. ~.{."1 x do.
 end.
 assert. 0 [ 'huff_decode'
 )
-lz_enc=: 3 : 0
-if. 6>#y do. a.i. y return. end.
+lz_enc=: 4 : 0
+if. (0=x) +. 6>#y do. a.i. y return. end.
+if. (1=x) *. 50000<#y do.
+  if. 0=istext y do. a.i. y return. end.
+end.
 h=. hash3 y
 of=. a.i. 2{.y
 i=. 2
@@ -434,6 +430,14 @@ ENDIAN=: ('a'={.2 ic a.i.'a')
 be32=: ,@:(|."1)@(_4&(]\))^:ENDIAN@:(2&ic)
 be32inv=: (_2&ic)@:(,@:(|."1)@(_4&(]\))^:ENDIAN)
 adler32=: [: ({: (23 b.) 16&(33 b.)@{.) _1 0 + [: ((65521 | +)/ , {.) [: (65521 | +)/\. 1 ,~ a. i. |.
+istext=: 3 : 0
+if. +./(a.{~9 10 13, 32+i.224) e. y do.
+  if. 0=+./(a.{~0 1 2 3 4 5 6, 14+i.18) e. y do.
+    1 return.
+  end.
+end.
+0
+)
 zlib_encode_j=: 6&$: : (4 : 0)
 (((16b78 1{a.);x) deflate y), be32 adler32 y
 )
