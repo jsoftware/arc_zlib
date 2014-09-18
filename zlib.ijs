@@ -368,17 +368,51 @@ assert. 0 [ 'huff_decode'
 )
 lz_enc=: 4 : 0
 if. (0=x) +. 6>#y do. a.i. y return. end.
-if. (1=x) *. 50000<#y do.
-  if. 0=istext y do. a.i. y return. end.
+largewindow=. x>6
+if. 1=x do.
+  if. 0= textonly=. istext y do. a.i. y return. end.
 end.
+prelook=. largewindow{1024 4096
+sliding=. largewindow{4096 32768
+maxmatch=. 258
+
 h=. hash3 y
 of=. a.i. 2{.y
 i=. 2
-win=. 32768
-maxmatch=. 258
+win=. 0
+winp=. 2
+winq=. 2
+h1x=. h1=. h0=. 0$0
+h0i=. h0&i:
 while. (_2+#y)>i do.
+  if. (i-winq)>:#h1 do.
+    if. (sliding-prelook) > slen=. (#h0)+(#h1) do.
+      h0=. h0, (winq+i.#h1){h
+    else.
+      h0=. (-(sliding-prelook)){.i{.h
+      winp=. i-(sliding-prelook)
+    end.
+    h0i=. h0&i:
+    h1=. prelook&{.^:(prelook<#) i}.h
+    h1x=. h1 i: prelook&{.^:(prelook<#) i}.h
+    winq=. i
+  end.
+  fnd=. 0
+  if. (#h1x)> ix=. (i-winq){h1x do.
+    if. ix<i-winq do. ix=. winq+ix [ fnd=. 1
+    else.
+      if. (#ht) > ixx=. (ht=. (i-winq){.h1) i: i{h do.
+        ix=. winq+ixx [ fnd=. 1
+      end.
+    end.
+  end.
+  if. 0=fnd do.
+    if. (#h0) > ix=. h0i i{y do.
+      ix=. winp + ix [ fnd=. 1
+    end.
+  end.
   j=. 0
-  if. (win>i-ix) *. i > ix=. (i{.h) i: i{h do.
+  if. fnd do.
     lookahead=. i}.y
     history=. ix}.i{.y
     j=. ((#y)-i) <. +/ *./\ (maxmatch{.lookahead)=maxmatch $ history
