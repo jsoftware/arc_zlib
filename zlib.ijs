@@ -212,6 +212,11 @@ deflate_unc_block=: 4 : 0
 n=. #y
 (x{a.),(Endian 1&ic n),(Endian 1&ic 0 (26 b.) n), y
 )
+
+NB.! Essays/Huffman Coding - J Wiki
+NB.! http://www.jsoftware.com/jwiki/Essays/Huffman%20Coding
+NB.! Contributed by RogerHui.
+
 hc=: 4 : 0
 if. 1=#x do. y
 else. ((i{x),+/j{x) hc (i{y),<j{y [ i=. (i.#x) -. j=. 2{./:x end.
@@ -226,6 +231,9 @@ assert. w -: ~.w
 t=. 0 {:: x hc w
 ((< S: 0 t) i. w) { <@(1&=)@; S: 1 {:: t
 )
+NB.! from J Programming forum
+NB.! contributed by Raul Miller
+
 bl_count=: 3 :0
 0,}.<:#/.~(,~ [: i. 1 + >./)y
 )
