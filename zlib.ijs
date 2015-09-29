@@ -214,7 +214,7 @@ n=. #y
 )
 
 NB.! Essays/Huffman Coding - J Wiki
-NB.! http://www.jsoftware.com/jwiki/Essays/Huffman%20Coding
+NB.! http://code.jsoftware.com/wiki/Essays/Huffman%20Coding
 NB.! Contributed by RogerHui.
 
 hc=: 4 : 0
