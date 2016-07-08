@@ -6,9 +6,9 @@ DESCRIPTION=: 0 : 0
 Utilities for zlib
 )
 
-VERSION=: '1.0.4'
+VERSION=: '1.0.5'
 
-RELEASE=: 'j803 j804'
+RELEASE=: 'j803 j804 j805'
 
 FILES=: 0 : 0
 zlib.ijs
