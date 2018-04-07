@@ -2,8 +2,8 @@ coclass 'jzlib'
 
 zlib=: IFUNIX{::'zlib1.dll';unxlib 'z'
 NOZLIB=: 0=(zlib,' zlibVersion >',(IFWIN#'+'),' x')&cd ::0:''
-zcompress2=: (zlib, ' compress2 >',(IFWIN#'+'),' i *c *x *c x i')&cd
-zuncompress=: (zlib, ' uncompress >',(IFWIN#'+'),' i *c *x *c x')&cd
+zcompress2=: (zlib, ' compress2  ',(IFWIN#'+'),' i *c *x *c x i')&cd
+zuncompress=: (zlib, ' uncompress  ',(IFWIN#'+'),' i *c *x *c x')&cd
 MAX_DEFLATE=: 16bffff
 
 DYNAMIC=: 1
@@ -494,7 +494,8 @@ of
 zlib_encode_so=: 6&$: : (4 : 0)
 len=. ,12+>.1.001*#y
 buf=. ({.len)$' '
-assert. 0= zcompress2 buf ; len ; y ; (#y) ; x
+assert. 0= >@{. cdrc=. zcompress2 buf ; len ; y ; (#y) ; x
+'buf len'=. 1 2{cdrc
 ({.len){.buf
 )
 
@@ -505,19 +506,20 @@ else.
   datalen=. , x
 end.
 data=. ({.datalen)#{.a.
-if. 0~: rc=. zuncompress data;datalen;y;#y do.
+if. 0~: rc=. >@{. cdrc=. zuncompress data;datalen;y;#y do.
   if. 0~:x do.
     assert. 0 [ 'zlib uncompression error'
   end.
   while. rc e. _5 do.
     datalen=. , f=. 2*f
     data=. ({.datalen)#{.a.
-    rc=. zuncompress data;datalen;y;#y
+    rc=. >@{. cdrc=. zuncompress data;datalen;y;#y
   end.
   if. 0~:rc do.
     smoutput rc
     assert. 0 [ 'zlib uncompression error'
   end.
+  'data datalen'=. 1 2{cdrc
 end.
 data=. ({.datalen){.data
 )
