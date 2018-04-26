@@ -8,7 +8,9 @@ Utilities for zlib
 
 VERSION=: '1.0.8'
 
-RELEASE=: 'j803 j804 j805 j806 j807'
+RELEASE=: ''
+
+FOLDER=: 'arc/zlib'
 
 FILES=: 0 : 0
 zlib.ijs

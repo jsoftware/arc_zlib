@@ -1,0 +1,14 @@
+NB. project: ~Addons/arc/zlib/source/source
+NB.
+NB. defines list of source files.
+NB. path defaults to project directory.
+
+init.ijs
+deflate.ijs
+huffman.ijs
+huffzlib.ijs
+inflate.ijs
+lz.ijs
+util.ijs
+zlibs.ijs
+zdefs.ijs
