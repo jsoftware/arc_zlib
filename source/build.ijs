@@ -1,6 +1,6 @@
 NB. build.ijs
 
-writesourcex_jp_ '~Addons/arc/zlib/source/source';'~Addons/arc/zlib/zlib.ijs'
+writesourcex_jp_ '~Addons/arc/zlib/source';'~Addons/arc/zlib/zlib.ijs'
 
 f=. 3 : 0
 (jpath '~addons/arc/zlib/',y) (fcopynew ::0:) jpath '~Addons/arc/zlib/',y
