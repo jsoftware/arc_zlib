@@ -43,7 +43,8 @@ else.
   datalen=. , x
 end.
 data=. ({.datalen)#{.a.
-if. 0~: rc=. >@{. cdrc=. zuncompress data;datalen;y;#y do.
+'rc data datalen'=. 3 {. cdrc=. zuncompress data;datalen;y;#y
+if. 0~:rc do.
   if. 0~:x do.
     assert. 0 [ 'zlib uncompression error'
   end.
