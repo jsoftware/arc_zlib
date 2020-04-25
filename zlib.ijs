@@ -520,9 +520,8 @@ if. 0~:rc do.
     smoutput rc
     assert. 0 [ 'zlib uncompression error'
   end.
-  'data datalen'=. 1 2{cdrc
 end.
-data=. ({.datalen){.data
+({.2{::cdrc){.1{::cdrc
 )
 zlib_compress=: zlib_encode_so`zlib_encode_j@.NOZLIB
 zlib_uncompress=: zlib_decode_so`zlib_decode_j@.NOZLIB
