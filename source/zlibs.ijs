@@ -56,9 +56,8 @@ if. 0~: rc=. >@{. cdrc=. zuncompress data;datalen;y;#y do.
     smoutput rc
     assert. 0 [ 'zlib uncompression error'
   end.
-  'data datalen'=. 1 2{cdrc
 end.
-data=. ({.datalen){.data
+({.2{::cdrc){.1{::cdrc
 )
 
 NB. =========================================================
