@@ -6,7 +6,7 @@ DESCRIPTION=: 0 : 0
 Utilities for zlib
 )
 
-VERSION=: '1.0.10'
+VERSION=: '1.0.11'
 
 RELEASE=: ''
 

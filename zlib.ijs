@@ -469,7 +469,7 @@ code, 2000+ex
 install=: 3 : 0
 if. -. IFWIN do. return. end.
 require 'pacman'
-'rc p'=. httpget_jpacman_ 'http://www.jsoftware.com/download/', z=. 'winlib/',(IF64{::'x86';'x64'),'/zlib1.dll'
+'rc p'=. httpget_jpacman_ 'http://www.jsoftware.com/download/', z=. 'winlib/',(IF64{::'x86';('arm64'-:9!:56'cpu'){::'x64';'arm64'),'/zlib1.dll'
 if. rc do.
   smoutput 'unable to download: ',z return.
 end.
